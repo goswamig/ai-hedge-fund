@@ -168,7 +168,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 # Run it as server 
 1. Once you complete the setup you can add following 
- `poetry add flask python-dotenv python-dateutil` 
+ `poetry add flask python-dotenv python-dateutil flask-cors` 
 2. Run the server 
 `poetry run python src/server.py`
 3. Run the query 

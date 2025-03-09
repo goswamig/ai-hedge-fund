@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # Import CORS
 from dotenv import load_dotenv
 from main import run_hedge_fund
 from datetime import datetime
@@ -9,6 +10,8 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
+
+CORS(app)  # Add this line
 
 @app.route('/run-hedge-fund', methods=['GET'])
 def run_hedge_fund_endpoint():
