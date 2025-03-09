@@ -9,6 +9,13 @@ import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import math  # Add this import to check for NaN
+#from typing import HumanMessage
+from langchain_core.messages import HumanMessage
+
+
+#from parse import parse_hedge_fund_response
+from utils.progress import progress
+
 
 # Import agent modules
 from agents.ben_graham import ben_graham_agent
@@ -47,6 +54,27 @@ def parse_hedge_fund_response(response):
         print(f"Unexpected error while parsing response: {e}\nResponse: {repr(response)}")
         return None
 
+# Add this new function to recursively remove "NaN" string values
+def remove_nan_values(data):
+    if isinstance(data, dict):
+        return {
+            k: remove_nan_values(v) 
+            for k, v in data.items() 
+            if not (isinstance(v, float) and math.isnan(v)) 
+            and not (isinstance(v, str) and v.strip().lower() == "nan")
+        }
+    elif isinstance(data, list):
+        return [
+            remove_nan_values(item) 
+            for item in data 
+            if not (isinstance(item, float) and math.isnan(item)) 
+            and not (isinstance(item, str) and item.strip().lower() == "nan")
+        ]
+    else:
+        return data
+
+
+"""
 def run_hedge_fund(
     tickers: list[str],
     start_date: str,
@@ -103,7 +131,105 @@ def run_hedge_fund(
     finally:
         # Stop progress tracking
         progress.stop()
+"""
 
+def create_workflow(selected_analysts=None):
+    """Create the workflow with selected analysts.
+    
+    In non-interactive mode, if no analysts are provided, all available agents are used.
+    """
+    workflow = StateGraph(AgentState)
+    workflow.add_node("start_node", start)
+
+    # Retrieve all available analyst nodes
+    analyst_nodes = get_analyst_nodes()
+
+    # Default to all analysts if none specified
+    if selected_analysts is None or not selected_analysts:
+        selected_analysts = list(analyst_nodes.keys())
+
+    # Add each selected analyst node to the workflow
+    for analyst_key in selected_analysts:
+        node_name, node_func = analyst_nodes[analyst_key]
+        workflow.add_node(node_name, node_func)
+        workflow.add_edge("start_node", node_name)
+
+    # Always add risk and portfolio management nodes
+    workflow.add_node("risk_management_agent", risk_management_agent)
+    workflow.add_node("portfolio_management_agent", portfolio_management_agent)
+
+    # Connect each analyst's output to the risk management agent
+    for analyst_key in selected_analysts:
+        node_name = analyst_nodes[analyst_key][0]
+        workflow.add_edge(node_name, "risk_management_agent")
+
+    workflow.add_edge("risk_management_agent", "portfolio_management_agent")
+    workflow.add_edge("portfolio_management_agent", END)
+
+    workflow.set_entry_point("start_node")
+    return workflow
+
+
+def run_hedge_fund(
+    tickers: list[str],
+    start_date: str,
+    end_date: str,
+    portfolio: dict,
+    show_reasoning: bool = False,
+    selected_analysts: list[str] = [],
+    model_name: str = "gpt-4o-mini",
+    model_provider: str = "OpenAI",
+):
+    # Start progress tracking
+    progress.start()
+    try:
+        # Always create a workflow using the provided (all) analysts
+        workflow = create_workflow(selected_analysts)
+        agent = workflow.compile()
+
+        final_state = agent.invoke(
+            {
+                "messages": [
+                    HumanMessage(
+                        content="Make trading decisions based on the provided data."
+                    )
+                ],
+                "data": {
+                    "tickers": tickers,
+                    "portfolio": portfolio,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "analyst_signals": {},
+                },
+                "metadata": {
+                    "show_reasoning": show_reasoning,
+                    "model_name": model_name,
+                    "model_provider": model_provider,
+                },
+            },
+        )
+
+        # Parse decisions and analyst signals
+        decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        analyst_signals = final_state["data"]["analyst_signals"]
+
+        # Apply the recursive NaN removal to both decisions and analyst_signals
+        if decisions is not None:
+            decisions = remove_nan_values(decisions)
+        analyst_signals = remove_nan_values(analyst_signals)
+
+        # Original filtering for float NaN values (optional, kept for robustness)
+        if decisions is not None:
+            decisions = {k: v for k, v in decisions.items() if not (isinstance(v, float) and math.isnan(v))}
+        analyst_signals = {k: v for k, v in analyst_signals.items() if not (isinstance(v, float) and math.isnan(v))}
+
+        return {
+            "decisions": decisions,
+            "analyst_signals": analyst_signals,
+        }
+    finally:
+        # Stop progress tracking
+        progress.stop()
 def start(state: AgentState):
     """Initialize the workflow with the input message."""
     return state
