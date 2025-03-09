@@ -8,6 +8,7 @@ import argparse
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+import math  # Add this import to check for NaN
 
 # Import agent modules
 from agents.ben_graham import ben_graham_agent
@@ -85,9 +86,19 @@ def run_hedge_fund(
             },
         )
 
+        # Parse decisions and analyst signals
+        decisions = parse_hedge_fund_response(final_state["messages"][-1].content)
+        analyst_signals = final_state["data"]["analyst_signals"]
+
+        # Filter out NaN values from decisions (assuming it's a dict of ticker: value pairs)
+        if decisions is not None:
+            decisions = {k: v for k, v in decisions.items() if not (isinstance(v, float) and math.isnan(v))}
+        # Filter out NaN values from analyst_signals
+        analyst_signals = {k: v for k, v in analyst_signals.items() if not (isinstance(v, float) and math.isnan(v))}
+
         return {
-            "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
-            "analyst_signals": final_state["data"]["analyst_signals"],
+            "decisions": decisions,
+            "analyst_signals": analyst_signals,
         }
     finally:
         # Stop progress tracking
@@ -234,4 +245,3 @@ if __name__ == "__main__":
     )
 
     print_trading_output(result)
-
