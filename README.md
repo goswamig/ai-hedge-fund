@@ -164,3 +164,12 @@ If you have a feature request, please open an [issue](https://github.com/virattt
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+
+# Run it as server 
+1. Once you complete the setup you can add following 
+ `poetry add flask python-dotenv python-dateutil` 
+2. Run the server 
+`poetry run python src/server.py`
+3. Run the query 
+`curl "http://127.0.0.1:5000/run-hedge-fund?tickers=AAPL,MSFT,NVDA"`
